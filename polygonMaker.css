@@ -1,0 +1,11 @@
+.point {
+	width: 10px;
+	height: 10px;
+	position: absolute;
+	background: blue;
+	border-radius: 50%;
+}
+
+.wrapper {
+	position: absolute;
+}

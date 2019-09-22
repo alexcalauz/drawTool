@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta name="viewport" content="initial-scale = 1.0,maximum-scale = 1.0" />
+	<link rel="stylesheet" type="text/css" href="layerNav.css" />
+  <style type="text/css">
+
+		#canvas {
+			width: 100%;
+			height: 100%;
+			position: relative;
+		}
+
+		.point {
+			position: absolute;
+			width: 2px;
+			height: 2px;
+			background: red;
+			border-radius: 50%;
+			cursor: pointer;
+		}
+
+		.handle {
+			position: absolute;
+			width: 10px;
+			height: 10px;
+			background: green;
+			border-radius: 50%;
+			cursor: pointer;
+		}
+
+		.point.selected {
+			background: blue;
+		}
+
+		.draggable {
+			position: absolute;
+		}
+
+		.drawnPoint {
+			position: absolute;
+		}
+
+		.drawnLine {
+			position: absolute;
+		}
+
+		#toolbar {
+			position: relative;
+			width: 100vw;
+			top: 0;
+			left: 0;
+			background:#ddd;
+			height: 100px;
+			position: absolute;
+		}
+
+		button {
+			background: #eee;
+			outline: none;
+		}
+
+		button.selected {
+			background: #ccc;
+		}
+
+		.brush-tools {
+			display: none;
+			width: 200px;
+			position: absolute;
+			top: 30px;
+			left: 0;
+		}
+
+		input[type="radio"]:checked + .brush-tools {
+			display: block;
+		}
+
+		.brush-tools input {
+			height: 20px;
+			width: 50px;
+		}
+
+		#brushPreview {
+			min-width: 20px;
+			min-height: 20px;
+		}
+
+		#paintingArea {
+			top: 100px;
+			position: absolute;
+			width: calc(100vw - 200px);
+			height: calc(100vh - 100px);
+			overflow: auto;
+			user-select: none;
+		}
+		
+		#underlay {
+			height: auto;
+			position: absolute;
+		}
+
+		body {
+			padding: 0;
+			margin: 0;
+		}
+
+		.wrapper {
+			position: absolute;
+		}
+
+		.wrapper.is-selected {
+			box-sizing: content-box;
+		}
+  </style>
+	<link rel="stylesheet" type="text/css" href="brush.css" />
+</head>
+<body>
+
+	<div id="toolbar" class="zoom-locked is-fullwidth">
+		<label for="select">SELECT</label>
+		<input type="radio" id="select" checked name="tools" data-name="select" />
+		<label for="draw">DRAW</label>
+		<input type="radio" id="draw" name="tools" data-name="draw" />
+		<div class="brush-tools">
+				<input type="number" data-modify="width" class="js-brush-setting" value="5" min="1" max="30" />
+				<input type="color" data-modify="color" class="js-brush-setting" value="#000000" />
+				<input type="number" data-modify="opacity" class="js-brush-setting" value="30" step="10" min="10" max="100" />
+				<input type="number" data-modify="blur" class="js-brush-setting" value="50" step="10" min="0" max="100" />
+		</div>
+		<label for="delete">DELETE</label>
+		<input type="radio" id="delete" name="tools" data-name="delete" />
+		<label for="mask">MASK</label>
+		<input type="radio" id="mask" name="tools" data-name="mask" />
+		<button onclick="save()">SAVE</button>
+		<button onclick="toggleUnderlay()">UNDERLAY</button>
+		<button onclick="toggleVisibility()">TOGGLE VISIBILITY</button>
+	</div>
+
+  <div id="layerPanel" class="zoom-locked is-fullheight">
+		<div id="layerTools">
+			<button id="addLayer" onClick="addLayer()">+</button>
+			<button id="addLayer" onClick="addLayer(false, true)">++</button>
+			<button id="deleteLayer" class="needs-selected-layer" onclick="deleteLayer()">-</button>
+			<button id="deleteLayer" class="needs-selected-layer" onclick="deleteMask()">-m</button>
+			<button id="moveUp" class="needs-selected-layer" onclick="selectedLayer.moveUp();updateLayerPanel()">&uarr;</button>
+			<button class="needs-selected-layer" id="moveDown" onclick="selectedLayer.moveDown();updateLayerPanel();
+			updateUI();">&darr;</button>
+			<button class="needs-selected-layer" id="appendToPrev" onclick="selectedLayer.appendToPrev();updateLayerPanel()">&uarr;+</button>
+			<button class="needs-selected-layer" id="prependToNext" onclick="selectedLayer.prependToNext();updateLayerPanel()">&darr;+</button>
+		</div>
+		<div id="layerStyles">
+			<div class="grid-1-2">
+				top:
+				<input type="number" class="layer-prop-control" data-name="top" step="10" min="-1000" max="1000" />
+			</div>
+			<div class="grid-1-2">
+				left:
+				<input type="number" class="layer-prop-control" data-name="left" step="10" min="-1000" max="1000" />
+			</div>
+			<div class="grid-1-2">
+				width:
+				<input type="number" class="layer-prop-control" data-name="width" step="10" min="0" max="1000" />
+			</div>
+			<div class="grid-1-2">
+				height:
+				<input type="number" class="layer-prop-control" data-name="height" step="10" min="0" max="1000" />
+			</div>
+			<div class="grid-1-2">
+				color:
+				<input type="color" class="layer-prop-control" data-name="backgroundColor" />
+			</div>
+			<div class="grid-1-2">
+				image:
+				<input type="text" class="layer-prop-control" data-name="backgroundImage" />
+			</div>
+			<div class="grid-1-2">
+				overflow:
+				<select class="layer-prop-control" data-name="overflow">
+					<option value="hidden">hidden</option>
+					<option value="visible">visible</option>
+				</select>
+			</div>
+			<div class="grid-1-2">
+				name:
+				<input type="text" class="layer-attr-control" data-name="data-name" />
+			</div>
+		</div>
+		<div id="layerList">
+		</div>
+	</div>
+
+		<div id="paintingArea">
+			<img id="underlay" width="1000" height="auto" src="landscape3.jpg" />
+
+			<div id="canvas" class="is-child-locked" data-layer-count="1">
+				<div class="layer" data-name="x1">
+					<div class="layer" data-name="x11" style="width: 200px; height: 100px;top: 20px; left: 32px;background-color: #000"></div>
+					<div class="layer" data-name="x12"></div>
+				</div>
+				<div class="layer" data-name="x2" style="width: 88px; height: 141px;top: 320px; left: 132px; background-color: #00f218"></div>
+				<div class="layer" data-name="x3">
+					<div class="layer" data-name="x31">
+						<div class="layer" data-name="x311"></div>
+						<div class="layer" data-name="x312"></div>
+						<div class="layer" data-name="x313"></div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+	<script src="prototypes.js"></script>
+	<script src="utils.js"></script>
+	<script>
+
+		function save() {
+			var params = {
+				canvas: canvas.innerHTML,
+				layerCount: getLayerCount(),
+			};
+			localStorage.drawTool = JSON.stringify(params);
+		};
+
+		function load() {
+			if(localStorage.drawTool != undefined) {
+				var params = JSON.parse(localStorage.drawTool);
+				canvas.innerHTML = params.canvas;
+				$('#canvas').setAttribute('data-layer-count', params.layerCount);
+			}
+		}
+
+		window.onload = function() {
+			load();
+
+			this.drawing = false;
+			this.lastDrawnCoords = null;
+			this.decrease = null;
+			//var decrease = [1, 100];
+			this.brushSettings = {
+				width: 5,
+				color: '000000',
+				opacity: '30',
+				blur: 1,
+			}
+			
+			this.pointSize = 4;
+
+			this.lastDecreased = null;
+			this.mode = null;
+			this.selectedLayer = null;
+			
+			this.paintingArea = $('#paintingArea');
+			this.toolbar = $('#toolbar');
+			this.deleteEvent;
+			this.layerPanel = $('#layerPanel');
+			this.layerList = $('#layerList');
+			this.canvas = $('#canvas');
+
+			this.pixelUnitProps = ['width', 'height', 'top', 'left'];
+			this.layerStyles = {
+				width: '0',
+				height: '0',
+				top: '0',
+				left: '0',
+				backgroundColor: '#ffffff',
+				backgroundImage: '',
+				overflow: 'hidden'
+			};
+
+			this.polygonCoords = [];
+			this.canDrawMask = 1;
+
+			this.offset = 2;
+			this.oldOffset = 1;
+			
+			this.lastZoom = getZoom();
+			this.paintableAreaOffsetTop = 100;
+			this.paintableAreaOffsetRight = 200;
+
+			updateLayerPanel();
+			updateUI();
+
+			$$('.js-brush-setting').forEach(function(e){
+				e.addEventListener('change', function(e){
+					var value = e.target.value;
+					e.target.getAttribute('type') == 'number' && (value *= 1);
+					e.target.getAttribute('type') == 'color' && (value = value.replace('#', ''));
+					brushSettings[e.target.getAttribute('data-modify')] = value;
+				})
+			});
+
+			$$('#toolbar input[type="radio"]').forEach(function(e){
+				e.addEventListener('change', function(){
+					mode = e.getAttribute('data-name');
+					if(mode == 'select') {
+						mode = null;
+					}
+					if(mode == 'mask' && selectedLayer) {
+						showElementMask();
+						updatePoints();
+					} else {
+						hideElementMask();
+					}
+					addSelectedClass();
+				})
+			})
+
+			$$('.layer-prop-control').forEach(function(element){
+				element.addEventListener('change', function(){
+					if(!selectedLayer) return;
+					let propName = element.getAttribute('data-name');
+					let value = element.value;
+					if(pixelUnitProps.indexOf(propName) > -1) {
+						value += 'px';
+					}
+					if(getLayerType(selectedLayer.parentElement) == 'wrapper') {
+						if(pixelUnitProps.indexOf(propName) > -1) {
+							selectedLayer.parentElement.style[propName] = value;
+						}
+						if(propName != 'top' && propName != 'left') {
+							selectedLayer.style[propName] = value;
+						}
+					} else {
+						selectedLayer.style[propName] = value;
+					}
+				})
+			});
+
+			$$('.layer').forEach(function(element){
+				attachLayerEvents(element);
+			});
+
+			$$('.layer-attr-control').forEach(function(element){
+				element.addEventListener('change', function(){
+					if(!selectedLayer) return;
+					let attrName = element.getAttribute('data-name');
+					let value = element.value;
+					if(value == '' || $('[data-name="' + value + '"]')) {
+						alert('name is empty or already exists');
+						return;
+					}
+					selectedLayer.setAttribute(attrName, value);
+					updateLayerPanel();
+				})
+			});
+			
+			Number.prototype.toHex = function() {
+				return this.toString(16);
+			}
+			
+			String.prototype.toNumber = function () {
+				return !isNaN(this * 1) ? this * 1 : 0;
+			}
+
+			paintingArea.addEventListener('mousedown', function(e){
+				if(mode == 'draw') {
+					drawing = true;
+					if(!selectedLayer || !selectedLayer.classList.contains('is-brush')) {
+						addLayer(true);
+					}
+					lastDrawnCoords = getMouseCoords(e);
+					draw(e, true);
+				}
+
+				if(mode == 'delete') {
+					deleteEvent = paintingArea.addEventListener('mouseover', deleteFunction)
+				}
+			});
+
+			paintingArea.addEventListener('mousemove', function(e){
+				if(mode == 'draw') {
+					draw(e, false);
+				}
+
+				if(mode == 'delete') {
+
+				}
+			});
+
+			paintingArea.addEventListener('mouseup', function(){
+				end();
+			});
+
+			paintingArea.addEventListener('mouseout', function(e){
+				var e = event.toElement || event.relatedTarget;
+				if (e && (e.isChildOf(paintingArea) || e == this)) {
+						return;
+				}
+				end();
+			}, true);
+			
+			adjustElements(getZoom());
+						
+			window.onresize = function (){
+				let zoom = getZoom();
+				if(zoom != lastZoom) {
+					adjustElements(zoom);
+				}
+			}
+			
+					//$$('.drawnPoint').forEach(function(e){
+						//scanPoint(e);
+					//});
+					
+					/*
+					var arr = [];
+					var points = [...$$('.drawnPoint')];
+					
+					for(let i in points) {
+						var e = points[i];
+						scanPoint(e);
+					};
+					
+					for(let i in points.reverse()) {
+						var e = points[i];
+						scanPoint(e, true);
+					};
+					
+					function scanPoint(e, reverse) {
+						reverse = reverse || false;
+						let next = reverse ? e.previousElementSibling : e.nextElementSibling;
+						if(!next) {
+							arr.push([e.clientWidth, 0], [0, e.clientHeight]);
+							return;
+						};
+						var diffX = getDiff(next, e, 'left');
+						var diffY = getDiff(next, e, 'top');
+						arr.push([diffX, 0], [0, diffY]);
+					}
+					
+					function getDiff(a, b, coord) {
+						return getCoord(a, coord) - getCoord(b, coord);
+					}
+					
+					function getCoord(el, coord) {
+						return el.style[coord].replace('px', '') * 1;
+					}
+					
+					pathString = 'M' + arr[0][0] + ',' + arr[0][1];
+						
+					for(let i in arr) {
+						pathString += 'l' + arr[i][0] + ',' + arr[i][1];
+						//$('#svg path').setAttribute('d', pathString)
+					}
+					pathString += 'z';
+					console.log(pathString);
+			*/
+		}
+			
+		function getLayerCount() {
+			return canvas.getAttribute('data-layer-count') * 1;
+		}
+		
+		function incrementLayerCount() {
+			canvas.setAttribute('data-layer-count', getLayerCount() + 1);
+		}
+		
+		function getClosestLayer() {
+			if(!selectedLayer) return false;
+			var next = selectedLayer.nextElementSibling;
+			if(next) {
+				if(getLayerType(next) == 'layer') {
+					return next;
+				}
+				if(getLayerType(next) == 'wrapper') {
+					return next.firstElementChild;
+				}
+			}
+			var prev = selectedLayer.previousElementSibling;
+			if(prev) {
+				if(getLayerType(prev) == 'layer') {
+					return prev;
+				}
+				if(getLayerType(prev) == 'wrapper') {
+					return prev.firstElementChild;
+				}
+			}
+			var parent = selectedLayer.parentElement;
+			if(parent) {
+				if(getLayerType(parent) == 'layer') {
+					return parent;
+				}
+				if(getLayerType(parent) == 'wrapper') {
+					return parent.firstElementChild;
+				}
+			}
+			return false;
+		}
+		
+		function getLayerType(element) {
+			if(element.classList.contains('layer')) {
+				return 'layer';
+			}
+			if(element.classList.contains('wrapper')) {
+				return 'wrapper'
+			}
+			return false;
+		}
+		
+		function isWrapper(element) {
+			 return element.classList.contains('layer') || element.classList.contains('wrapper');
+		}
+
+		function drawPolygon(e) {
+			if(selectedLayer.hasMask) {
+				return;
+			}
+			let polygonCoords = getPolygonCoords();
+			var element = selectedLayer.parentElement;
+			var x = e.pageX - element.getBoundingClientRect().x;
+			var y = e.pageY - element.getBoundingClientRect().y;
+			percentageX = ((x * 100) / element.clientWidth).toFixed(2);
+			percentageY = ((y * 100) / element.clientHeight).toFixed(2);
+			polygonCoords.push([percentageX, percentageY]);
+			updateClipMask(polygonCoords);
+			updatePoints();
+		}
+
+		function getPolygonCoords() {
+			var coords = [];
+			var clipPath = selectedLayer.style.clipPath;
+			var clipPathCoords = clipPath.replace('polygon(', '').replace(')', '');
+			if(clipPathCoords == '') {
+				return [];
+			}
+			clipPathCoords = clipPathCoords.split(', ');
+			for(let i in clipPathCoords) {
+				clipPathCoords[i] = clipPathCoords[i].replace('%', '').replace('%', '').split(' ');
+			}
+			return clipPathCoords;
+		}
+
+		function updatePoints() {
+			selectedLayer.parentElement.querySelectorAll('.point').forEach(function(e){
+				e.remove();
+			});
+			let polygonCoords = getPolygonCoords();
+			for(let i in polygonCoords) {
+				var element = document.createElement('div');
+				element.classList.add('point');
+				element.setAttribute('data-id', i);
+				element.style.left = (polygonCoords[i][0] * selectedLayer.clientWidth / 100) - 1 + 'px';
+				element.style.top = (polygonCoords[i][1] * selectedLayer.clientHeight / 100) - 1 + 'px';
+
+				element.drg(function(e){
+					var x = e.pageX - selectedLayer.getBoundingClientRect().x;
+					var y = e.pageY - selectedLayer.getBoundingClientRect().y;
+					percentageX = ((x * 100) / selectedLayer.clientWidth).toFixed(2);
+					percentageY = ((y * 100) / selectedLayer.clientHeight).toFixed(2);
+					polygonCoords[i] = [percentageX, percentageY];
+					updateClipMask(polygonCoords);
+				});
+
+				selectedLayer.parentElement.appendChild(element);
+				if(i == 0) {
+					element.addEventListener('click', function() {
+						closePath();
+						updateClipMask(polygonCoords);
+					});
+				}
+				if(i == polygonCoords.length - 1 && polygonCoords[i] == polygonCoords[0]) {
+					continue;
+				}
+			}
+		}
+
+		function updateClipMask(polygonCoords) {
+			selectedLayer.style.clipPath = getPolyString(polygonCoords);
+		}
+
+		function closePath() {
+			let polygonCoords = getPolygonCoords();
+			if(polygonCoords[0] == polygonCoords[polygonCoords.length - 1]) {
+				return;
+			}
+			selectedLayer.hasMask = 1;
+			polygonCoords.push(polygonCoords[0]);
+		}
+
+		function deleteMask() {
+			selectedLayer.unwrap();
+			selectedLayer.style.clipPath = '';
+			selectedLayer.hasMask = 0;
+		}
+
+		function getPolyString(polygonCoords) {
+			let string = '';
+			for(let i in polygonCoords) {
+				string += polygonCoords[i][0] + '% ' + polygonCoords[i][1] + '%';
+				if(i != polygonCoords.length - 1) {
+					string += ', ';
+				}
+			}
+			return 'polygon(' + string + ')';
+		}
+
+		function attachLayerEvents(element) {
+			element.addEventListener('click', function(e){
+				if(mode == 'mask' || mode == 'delete' || mode == 'draw') return;
+				if(element.classList.contains('drawLine')) {
+					selectLayer(element.parentElement);
+					return;
+				}
+				e.stopPropagation();
+				selectLayer(element);
+			})
+		}
+
+		function showElementMask() {
+			if(!selectedLayer) {
+				return;
+			}
+			selectedLayer.wrap();
+			selectedLayer.parentElement.addEventListener('click', drawPolygon);
+		}
+
+		function hideElementMask() {
+			if(selectedLayer) {
+				selectedLayer.parentElement.classList.remove('is-selected');
+				selectedLayer.classList.add('is-selected');
+				selectedLayer.unwrap();
+			}
+		}
+
+		function selectLayer(newLayer) {
+			hideElementMask();
+			if(typeof(newLayer) == 'string') {
+				selectedLayer = $('[data-name="' + newLayer + '"]');
+			} else {
+				selectedLayer = newLayer;
+			}
+			if(mode == 'mask') {
+				showElementMask();
+				updatePoints();
+			}
+			var prevSelectedLayer = $('.layer.is-selected');
+			prevSelectedLayer && prevSelectedLayer.classList.remove('is-selected');
+			addSelectedClass();
+			updateLayerPanel();
+			updateLayerStyles();
+			updateLayerAttrs();
+			updateUI();
+		}
+
+		function addSelectedClass() {
+			if(!selectedLayer) return;
+			if(selectedLayer.parentElement.classList.contains('wrapper')) {
+				selectedLayer.classList.remove('is-selected');
+				selectedLayer.parentElement.classList.add('is-selected');
+			} else {
+				selectedLayer.classList.add('is-selected');
+			}
+		}
+
+		function updateUI() {
+			let uiStatus = !selectedLayer;
+			$$('.needs-selected-layer').forEach(function(element) {
+				element.disabled = uiStatus;
+			})
+			$('#addLayer').disabled;
+		}
+
+		function updateLayerStyles() {
+			for(let i in layerStyles) {
+				var propName = i;
+				var defaultValue = layerStyles[i];
+				if(selectedLayer && getLayerType(selectedLayer.parentElement) == 'wrapper' && (propName == 'top' || propName == 'left')) {
+					var propValue = selectedLayer ? selectedLayer.parentElement.style[propName] : '';
+				} else {
+					var propValue = selectedLayer ? selectedLayer.style[propName] : '';
+				}
+				if(propValue == '') {
+					propValue = defaultValue;
+				}
+				if(propValue.indexOf('px') > -1) {
+					propValue = propValue.replace('px', '');
+				}
+				if(propName == 'backgroundColor' && propValue.indexOf('rgb(') > -1) {
+					propValue = propValue.replace('rgb(', '').replace(')', '').split(', ');
+					for(let i in propValue) {
+						propValue[i] = propValue[i].toNumber().toHex();
+						if(propValue[i].length == 1) {
+							propValue[i] = '0' + propValue[i];
+						}
+					}
+					propValue = '#' + propValue.join('');
+				}
+				$('.layer-prop-control[data-name="' + propName + '"]').value = propValue
+			}
+		}
+
+		function updateLayerAttrs() {
+			let name = selectedLayer ? selectedLayer.getAttribute('data-name') : '';
+			$('.layer-attr-control[data-name="data-name"]').value = name;
+		}
+
+		function scan(element, appendTo) {
+			var list = appendTo.insert('ul', 'layer-list-group');
+
+			element.children.forEach(function(e){
+				var listItem = list.insert('li', 'layer-list-item');
+				if(!e.classList.contains('wrapper')) {
+						var elementToScan = e;
+					} else {
+						var elementToScan = e.firstElementChild;
+					}
+				var listItemLabel = listItem.insert('div', 'layer-label', elementToScan.getAttribute('data-name'), {'click': onLayerClick});
+				if(elementToScan.childElementCount > 0 && !elementToScan.classList.contains('is-brush')) {
+					scan(elementToScan, listItem);
+				}
+			})
+		}
+
+		function onLayerClick(e) {
+			selectLayer(e.target.getAttribute('data-layer-name'))
+		}
+
+		function empty() {
+			layerList.innerHTML = '';
+		}
+
+		function updateLayerPanel() {
+			layerList.empty();
+			scan(canvas, layerList);
+			if(selectedLayer) {
+				layerList.querySelector('[data-layer-name="' + selectedLayer.getAttribute('data-name') + '"]').classList.add('is-selected');
+			}
+		}
+
+		function deleteLayer() {
+			var closestElement = getClosestLayer();
+			var oldLayer = selectedLayer.getAttribute('data-name');
+			selectedLayer.remove();
+			selectedLayer = null;
+			closestElement && selectLayer(closestElement);
+			updateLayerPanel();
+			updateLayerStyles();
+			updateLayerAttrs();
+			updateUI();
+		}
+
+		function addLayer(isBrush, clone) {
+			clone = clone || false;
+			isBrush = isBrush || false;
+			className = 'layer';
+			isBrush && (className += ' is-brush');
+			var into = selectedLayer ? selectedLayer : canvas;
+			if(isBrush) {
+				if(selectedLayer) {
+					into = selectedLayer.parentElement;
+				} else {
+					into = canvas;
+				}
+			}
+			if(!clone) {
+				var newLayer = addElement(into, {overflow: 'visible'}, {'data-name': 'New Layer ' + (getLayerCount() + 1), class: className});
+			} else {
+				var newLayer = selectedLayer.cloneNode(true);
+				if(newLayer.childElementCount > 0) {
+					newLayer.children.forEach(function(e){
+						e.setAttribute('data-name', 'New Layer ' + (parseInt(getLayerCount()) + 1));
+						incrementLayerCount();
+					})
+				}
+				newLayer.setAttribute('data-name', 'New Layer ' + (parseInt(getLayerCount()) + 1));
+				selectedLayer.parentElement.appendChild(newLayer);
+			}
+			selectLayer(newLayer);
+			incrementLayerCount();
+			updateLayerPanel();
+			updateLayerStyles();
+			updateUI();
+			attachLayerEvents(newLayer);
+		}
+
+		function addElement(into, styles, attributes) {
+			var element = document.createElement('div');
+			for(let i in styles) {
+				element.style[i] = styles[i];
+			}
+			for(let i in attributes) {
+				element.setAttribute(i, attributes[i]);
+			}
+			into.appendChild(element);
+			return element;
+		}
+
+		function getBrushDistance() {
+			return Math.round(brushSettings.width - brushSettings.width / 4);
+		}
+		function getBrushBlur() {
+			return brushSettings.blur;
+		}
+
+		function getMouseCoords(event) {
+			return [event.pageX, event.pageY - 100]
+		}
+
+		function end() {
+			if(mode == 'draw') {
+				drawing = false;
+				offset = 2;
+				oldOffset = 1;
+				if($$('.drawnPoint').length > 0) {
+					correctPath();
+				}
+			}
+
+			if(mode == 'delete') {
+				paintingArea.removeEventListener('mouseover', deleteFunction);
+			}
+		}
+
+		function deleteFunction(e){
+			if(e.target.classList.contains('drawnLine') || e.target.classList.contains('drawnPoint')) {
+				e.target.remove();
+			}
+		}
+
+		function draw(e, isFirstTouch) {
+			if(!drawing || !selectedLayer) return;
+			var currentCoords = getMouseCoords(e);
+			var distance = getDistance(lastDrawnCoords, currentCoords);
+			if(distance >= getBrushDistance() || isFirstTouch) {
+				//console.log(distance);
+				var element = document.createElement('div');
+				element.setAttribute('class', 'drawnPoint c' + brushSettings.color + ' o' + brushSettings.opacity / 10 + ' b' + getBrushBlur() + ' w' + brushSettings.width);
+				element.style.left = currentCoords[0] - selectedLayer.getBoundingClientRect().left + 'px';
+				element.style.backgroundColor = '#' + brushSettings.color;
+				element.style.top = currentCoords[1] - selectedLayer.getBoundingClientRect().top + 100 + 'px';
+				selectedLayer.prepend(element);
+				if(decrease) {
+					if(lastDecreased) {
+						var diff = brushSettings.width - decrease[0];
+						var step = decrease[1] / diff;
+						if(getDistance(lastDecreased, currentCoords) >= step) {
+							brushSettings.width --;
+							lastDecreased = currentCoords;
+						}
+					} else {
+						lastDecreased = currentCoords;
+					}
+				}
+				lastDrawnCoords = currentCoords;
+			}
+		}
+
+		function getTolerance() {
+			return (brushSettings.width / 6.25).toFixed(2);
+		}
+
+		function scanChunk(from, to) {
+			if(to <= from) {
+				return false;
+			}
+			var firstElement = $('.drawnPoint', from);
+			var lastElement = $('.drawnPoint', to);
+
+			var firstElementCoords = getElementCoords(firstElement);
+			var lastElementCoords = getElementCoords(lastElement);
+
+			var eqParams = getEqParams(firstElementCoords, lastElementCoords);
+			var slope = eqParams.slope;
+			var offset = eqParams.offset;
+
+			if(to - from < 2) {
+				return [slope, true];
+			}
+
+			for(let i = from; i <= to; i++) {
+				var el = $('.drawnPoint', i + 1);
+				var elCoords = getElementCoords(el);
+				var diffY = elCoords.y - (slope * elCoords.x + offset);
+				var diffX = elCoords.x - ((elCoords.y - offset) / slope);
+				if(Math.abs(diffX) > getTolerance() || Math.abs(diffY) > getTolerance()) {
+					return [slope, false];
+				} else {
+					return [slope, true];
+				}
+			}
+		}
+
+		function fix() {
+			var nodeCount = $$('.drawnPoint').length;
+
+			if(oldOffset == offset) {
+				return false;
+			}
+
+			if(offset > nodeCount) {
+				offset = nodeCount;
+			}
+			if(oldOffset > nodeCount) {
+				oldOffset = nodeCount;
+			}
+			var m = false;
+
+			while(scanChunk(oldOffset, offset)[1] != false && offset < nodeCount) {
+				//console.log(scanChunk(oldOffset, offset))
+				if(offset > 1) {
+					var startElement = $('.drawnPoint', offset - 1);
+					var endElement = $('.drawnPoint', offset);
+					var brushSizeChanged = startElement.height != endElement.height;
+					if(brushSizeChanged) {
+						break;
+					}
+				}
+				var m = scanChunk(oldOffset, offset)[0];
+				var isReplaceble = scanChunk(oldOffset, offset)[1];
+				offset++
+			}
+
+			var arr = [oldOffset, offset - (offset == nodeCount ? 0 : 1), m, isReplaceble]
+
+			oldOffset = offset;
+			offset += offset != nodeCount ? 1 : 0;
+			return arr;
+		}
+
+		function correctPath() {
+			var rmv = [];
+			while(true) {
+				var result = fix();
+				if(!result) break;
+
+				var from = result[0];
+				var to = result[1];
+				var slope = result[2];
+
+				var element1 = $('.drawnPoint', from);
+				var element2 = $('.drawnPoint', to);
+
+				var element1X = element1.getLeft();
+				var element1Y = element1.getTop();
+				var element2X = element2.getLeft();
+				var element2Y = element2.getTop();
+
+				var distance = getDistance([element1X, element1Y], [element2X, element2Y]);
+				var el = document.createElement('div');
+				el.setAttribute('class', element1.getAttribute('class').replace('drawnPoint', 'drawnLine'));
+				el.style.width = distance + brushSettings.width + 'px';
+				el.style.height = element1.clientHeight + 'px';
+				el.style.top = (element1Y + brushSettings.width / 2 + element2Y + brushSettings.width / 2) / 2 - (element1.clientHeight / 2) + 'px';
+				el.style.left = (element1X + brushSettings.width / 2 + element2X + brushSettings.width / 2) / 2 - (distance / 2) - (brushSettings.width / 2) + 'px';
+				el.style.backgroundColor = element1.style.backgroundColor;
+				switch(result[2]) {
+					case 'vertical':
+						var rotation = 90;
+						break;
+
+					case 'horizontal':
+						var rotation = 0;
+						break;
+
+					default:
+						var rotation = Math.atan(slope).toDeg();
+				}
+				el.style.transform = 'rotate(' + rotation + 'deg)';
+				for(let i = from; i <= to; i++) {
+					rmv.push($('.drawnPoint', i));
+				}
+				selectedLayer.appendChild(el);
+			}
+			for(let i in rmv) {
+				rmv[i].remove();
+			}
+			//console.log(rmv.length);
+		}
+		
+		function getZoom() {
+			return window.devicePixelRatio.toFixed(2) * 1;
+		}
+		
+		function adjustElements(zoom) {
+			$$('.zoom-locked').forEach(function(e){
+				e.style.zoom = 1 / zoom;
+			});
+			paintingArea.style.top = paintableAreaOffsetTop / zoom + 'px';
+			paintingArea.style.width = 'calc(100vw - ' + paintableAreaOffsetRight / zoom + 'px)';
+			paintingArea.style.height = 'calc(100vh - ' + paintableAreaOffsetTop / zoom + 'px)';
+			lastZoom = zoom;
+		
+			$$('.zoom-locked.is-fullheight').forEach(function(e){
+				e.style.height = zoom * 100 + 'vh';
+			});
+			
+			$$('.zoom-locked.is-fullwidth').forEach(function(e){
+				e.style.width = zoom * 100 + 'vw';
+			});
+		}
+		
+		function toggleUnderlay() {
+			var zIndex = $('#underlay').style.zIndex;
+			if(zIndex == '') {
+				zIndex = '2';
+			} else {
+				zIndex = '';
+			}
+			$('#underlay').style.zIndex = zIndex;
+		}
+		
+		function toggleVisibility() {
+			var visibility = selectedLayer.style.visibility;
+			if(visibility == '') {
+				visibility = 'hidden';
+			} else {
+				visibility = '';
+			}
+			selectedLayer.style.visibility = visibility;
+		}
+		
+		function duplicate() {
+			
+		}
+	</script>
+</body>
+</html>
